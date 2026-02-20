@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON BLASTER — Arcade Game</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00f5ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NeonBlaster">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js');
+    });
+  }
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --neon-cyan: #00f5ff;
+    --neon-pink: #ff006e;
+    --neon-yellow: #ffbe0b;
+    --neon-green: #06d6a0;
+    --dark: #050510;
+    --dark2: #0a0a1f;
+    --glow-cyan: 0 0 10px #00f5ff, 0 0 30px #00f5ff44;
+    --glow-pink: 0 0 10px #ff006e, 0 0 30px #ff006e44;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    font-family: 'Orbitron', monospace;
+    color: #fff;
+    min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Stars background */
+  #stars {
+    position: fixed;
+    width: 100%; height: 100%;
+    top: 0; left: 0;
+    z-index: 0;
+  }
+
+  /* ===== SCREENS ===== */
+  .screen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 10;
+  }
+  .screen.active { display: flex; }
+
+  /* ===== TITLE SCREEN ===== */
+  #title-screen {
+    gap: 20px;
+    background: radial-gradient(ellipse at center, #0a0a2e 0%, #050510 70%);
+  }
+
+  .game-logo {
+    text-align: center;
+    animation: logo-pulse 2s ease-in-out infinite;
+  }
+
+  .game-logo h1 {
+    font-size: clamp(2.5rem, 8vw, 6rem);
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    background: linear-gradient(135deg, var(--neon-cyan), var(--neon-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 20px #00f5ff88);
+  }
+
+  .game-logo p {
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--neon-yellow);
+    font-size: 0.9rem;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  @keyframes logo-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+  }
+
+  /* ===== PRICING CARDS ===== */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    max-width: 700px;
+    width: 90%;
+    margin: 20px 0;
+  }
+
+  .price-card {
+    border: 1px solid #ffffff22;
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(10px);
+  }
+
+  .price-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--neon-cyan);
+    box-shadow: var(--glow-cyan);
+  }
+
+  .price-card.featured {
+    border-color: var(--neon-pink);
+    background: rgba(255,0,110,0.08);
+  }
+
+  .price-card.featured::before {
+    content: '⭐ ПОПУЛЯРНО';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--neon-pink);
+    color: #fff;
+    font-size: 0.55rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+
+  .price-card .plan-name {
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    color: #aaa;
+    margin-bottom: 8px;
+  }
+
+  .price-card .price {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: var(--neon-cyan);
+  }
+
+  .price-card .price span { font-size: 0.8rem; color: #888; }
+
+  .price-card .desc {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: #aaa;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
+  /* ===== GOOGLE PAY BUTTON ===== */
+  .gpay-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px 28px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    color: #fff;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 8px;
+  }
+
+  .gpay-btn:hover {
+    background: #111;
+    border-color: var(--neon-cyan);
+    box-shadow: var(--glow-cyan);
+    transform: scale(1.02);
+  }
+
+  .gpay-logo {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 1rem;
+    font-weight: bold;
+  }
+  .gpay-logo .g { color: #4285F4; }
+  .gpay-logo .o1 { color: #EA4335; }
+  .gpay-logo .o2 { color: #FBBC05; }
+  .gpay-logo .g2 { color: #34A853; }
+  .gpay-logo .le { color: #4285F4; }
+  .gpay-logo .pay { color: #fff; margin-left: 3px; }
+
+  /* ===== PLAY BUTTON ===== */
+  .btn-primary {
+    background: linear-gradient(135deg, var(--neon-cyan), #0080ff);
+    border: none;
+    border-radius: 8px;
+    padding: 14px 40px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: #000;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+  }
+
+  .btn-primary:hover {
+    transform: scale(1.05);
+    box-shadow: var(--glow-cyan);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--neon-pink);
+    border-radius: 8px;
+    padding: 10px 30px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    color: var(--neon-pink);
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255,0,110,0.1);
+    box-shadow: var(--glow-pink);
+  }
+
+  /* ===== PAYMENT MODAL ===== */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 500;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(6px);
+  }
+
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--dark2);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 16px;
+    padding: 32px;
+    width: 90%;
+    max-width: 380px;
+    box-shadow: var(--glow-cyan);
+    text-align: center;
+    position: relative;
+    animation: modal-in 0.3s ease;
+  }
+
+  @keyframes modal-in {
+    from { transform: scale(0.8) translateY(20px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+  }
+
+  .modal h3 {
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+    color: var(--neon-cyan);
+  }
+
+  .modal .modal-price {
+    font-size: 2rem;
+    font-weight: 900;
+    margin: 12px 0;
+    color: #fff;
+  }
+
+  .modal .modal-desc {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 12px; right: 16px;
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: color 0.2s;
+    font-family: monospace;
+  }
+  .modal-close:hover { color: #fff; }
+
+  .payment-spinner {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 0;
+  }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid #333;
+    border-top-color: var(--neon-cyan);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .payment-success {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .checkmark {
+    font-size: 3rem;
+    animation: pop 0.5s ease;
+  }
+
+  @keyframes pop {
+    0% { transform: scale(0); }
+    70% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+
+  /* ===== GAME CANVAS ===== */
+  #game-screen {
+    background: var(--dark);
+  }
+
+  #game-canvas {
+    border: 1px solid #ffffff11;
+    display: block;
+    box-shadow: 0 0 40px rgba(0,245,255,0.1);
+  }
+
+  #hud {
+    position: fixed;
+    top: 10px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  .hud-item {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--neon-cyan);
+  }
+
+  .hud-label { color: #555; font-size: 0.6rem; display: block; margin-bottom: 2px; }
+
+  #shop-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 20;
+    pointer-events: all;
+  }
+
+  /* ===== GAME OVER ===== */
+  #gameover-screen {
+    gap: 16px;
+  }
+
+  #gameover-screen h2 {
+    font-size: 3rem;
+    font-weight: 900;
+    color: var(--neon-pink);
+    filter: drop-shadow(0 0 20px #ff006e);
+    animation: flicker 0.1s infinite alternate;
+  }
+
+  @keyframes flicker {
+    from { opacity: 1; }
+    to { opacity: 0.85; }
+  }
+
+  .final-score {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1rem;
+    color: #aaa;
+  }
+
+  .final-score span {
+    color: var(--neon-yellow);
+    font-size: 1.5rem;
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* IAP Shop */
+  .shop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  .shop-item {
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+    background: rgba(255,255,255,0.02);
+  }
+
+  .shop-item:hover {
+    border-color: var(--neon-yellow);
+    box-shadow: 0 0 15px rgba(255,190,11,0.3);
+    transform: translateY(-2px);
+  }
+
+  .shop-item .item-icon { font-size: 1.8rem; margin-bottom: 6px; }
+  .shop-item .item-name { font-size: 0.65rem; color: #aaa; letter-spacing: 0.1em; }
+  .shop-item .item-price {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--neon-yellow);
+    margin-top: 4px;
+  }
+
+  .tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: none;
+    color: #666;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab.active {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    background: rgba(0,245,255,0.08);
+  }
+
+  .notice {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    color: #555;
+    text-align: center;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<!-- ===== TITLE SCREEN ===== -->
+<div id="title-screen" class="screen active">
+  <div class="game-logo">
+    <h1>NEON BLASTER</h1>
+    <p>◆ Arcade Action ◆</p>
+  </div>
+
+  <div class="pricing-grid">
+    <div class="price-card" onclick="openPayment('basic')">
+      <div class="plan-name">БАЗОВЫЙ</div>
+      <div class="price">0.49<span>€</span></div>
+      <div class="desc">10 уровней<br>Базовое оружие<br>1 жизнь</div>
+    </div>
+    <div class="price-card featured" onclick="openPayment('premium')">
+      <div class="plan-name">ПРЕМИУМ</div>
+      <div class="price">1.49<span>€</span></div>
+      <div class="desc">Все уровни<br>3 оружия<br>5 жизней</div>
+    </div>
+    <div class="price-card" onclick="openPayment('subscription')">
+      <div class="plan-name">ПОДПИСКА</div>
+      <div class="price">0.79<span>€/мес</span></div>
+      <div class="desc">Всё включено<br>Новый контент<br>Без рекламы</div>
+    </div>
+  </div>
+
+  <button class="btn-secondary" onclick="startGameFree()">▶ БЕСПЛАТНО (3 уровня)</button>
+  <div class="notice">Демо-версия платёжной системы. Реальные деньги не списываются.</div>
+</div>
+
+<!-- ===== GAME SCREEN ===== -->
+<div id="game-screen" class="screen">
+  <div id="hud">
+    <div class="hud-item"><span class="hud-label">СЧЁТ</span><span id="score-display">0</span></div>
+    <div class="hud-item"><span class="hud-label">УРОВЕНЬ</span><span id="level-display">1</span></div>
+    <div class="hud-item"><span class="hud-label">ЖИЗНИ</span><span id="lives-display">❤️❤️❤️</span></div>
+  </div>
+  <canvas id="game-canvas"></canvas>
+  <button class="btn-secondary" id="shop-btn" onclick="openShop()">🛒 МАГАЗИН</button>
+</div>
+
+<!-- ===== GAME OVER SCREEN ===== -->
+<div id="gameover-screen" class="screen">
+  <h2>GAME OVER</h2>
+  <div class="final-score">Ваш счёт: <span id="final-score">0</span></div>
+  <button class="btn-primary" onclick="restartGame()">↺ СНОВА</button>
+  <button class="btn-secondary" onclick="showTitle()">ГЛАВНОЕ МЕНЮ</button>
+</div>
+
+<!-- ===== PAYMENT MODAL ===== -->
+<div class="modal-overlay" id="payment-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="payment-form">
+      <h3 id="modal-title">ПРЕМИУМ ДОСТУП</h3>
+      <div class="modal-price" id="modal-price">149₽</div>
+      <div class="modal-desc" id="modal-desc">Полный доступ ко всем уровням, 3 вида оружия, 5 жизней</div>
+      <div id="gpay-container" style="margin-top:8px;min-height:52px;"></div>
+      <div class="notice" style="margin-top:12px;">Платёж обрабатывается через Stripe. Данные карты защищены.</div>
+    </div>
+    <div class="payment-spinner" id="payment-spinner">
+      <div class="spinner"></div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:0.75rem;color:#aaa;">Обработка платежа...</div>
+    </div>
+    <div class="payment-success" id="payment-success">
+      <div class="checkmark">✅</div>
+      <div style="font-size:0.9rem;color:var(--neon-green);font-weight:700;">Оплата прошла успешно!</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:0.7rem;color:#aaa;" id="success-msg">Премиум активирован</div>
+      <button class="btn-primary" onclick="afterPayment()">ИГРАТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SHOP MODAL ===== -->
+<div class="modal-overlay" id="shop-modal">
+  <div class="modal" style="max-width:420px;">
+    <button class="modal-close" onclick="document.getElementById('shop-modal').classList.remove('active')">✕</button>
+    <h3>МАГАЗИН</h3>
+
+    <div class="tab-bar" style="margin-top:16px;">
+      <button class="tab active" onclick="switchTab('items',this)">ПРЕДМЕТЫ</button>
+      <button class="tab" onclick="switchTab('lives',this)">ЖИЗНИ</button>
+      <button class="tab" onclick="switchTab('sub',this)">ПОДПИСКА</button>
+    </div>
+
+    <div id="tab-items" class="tab-content">
+      <div class="shop-grid">
+        <div class="shop-item" onclick="buyItem('Лазерная пушка','€0.89')">
+          <div class="item-icon">🔫</div>
+          <div class="item-name">ЛАЗЕР</div>
+          <div class="item-price">€0.89</div>
+        </div>
+        <div class="shop-item" onclick="buyItem('Щит','€0.49')">
+          <div class="item-icon">🛡️</div>
+          <div class="item-name">ЩИТ</div>
+          <div class="item-price">€0.49</div>
+        </div>
+        <div class="shop-item" onclick="buyItem('Бомба х5','€0.29')">
+          <div class="item-icon">💣</div>
+          <div class="item-name">БОМБА х5</div>
+          <div class="item-price">€0.29</div>
+        </div>
+        <div class="shop-item" onclick="buyItem('Ускорение','€0.39')">
+          <div class="item-icon">⚡</div>
+          <div class="item-name">УСКОРЕНИЕ</div>
+          <div class="item-price">€0.39</div>
+        </div>
+      </div>
+    </div>
+    <div id="tab-lives" class="tab-content" style="display:none;">
+      <div class="shop-grid">
+        <div class="shop-item" onclick="buyItem('1 жизнь','€0.19')">
+          <div class="item-icon">❤️</div>
+          <div class="item-name">1 ЖИЗНЬ</div>
+          <div class="item-price">€0.19</div>
+        </div>
+        <div class="shop-item" onclick="buyItem('3 жизни','€0.49')">
+          <div class="item-icon">💖</div>
+          <div class="item-name">3 ЖИЗНИ</div>
+          <div class="item-price">€0.49</div>
+        </div>
+        <div class="shop-item" onclick="buyItem('5 жизней','€0.79')">
+          <div class="item-icon">💗</div>
+          <div class="item-name">5 ЖИЗНЕЙ</div>
+          <div class="item-price">€0.79</div>
+        </div>
+        <div class="shop-item" onclick="buyItem('Бесконечные жизни (1 ч)','€0.99')">
+          <div class="item-icon">♾️</div>
+          <div class="item-name">∞ ЖИЗНЕЙ 1ч</div>
+          <div class="item-price">€0.99</div>
+        </div>
+      </div>
+    </div>
+    <div id="tab-sub" class="tab-content" style="display:none;">
+      <div style="text-align:center;padding:10px 0;">
+        <div style="font-size:2rem;margin-bottom:8px;">👑</div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--neon-yellow);margin-bottom:8px;">NEON PASS</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:0.7rem;color:#aaa;line-height:1.8;margin-bottom:16px;">
+          ✓ Все уровни и оружие<br>
+          ✓ Безлимитные жизни<br>
+          ✓ Ранний доступ к новинкам<br>
+          ✓ Без рекламы
+        </div>
+        <div style="font-size:1.5rem;font-weight:900;color:var(--neon-cyan);margin-bottom:12px;">€0.79/мес</div>
+        <button class="gpay-btn" style="margin:0 auto;" onclick="buyItem('Подписка NEON PASS','€0.79/мес')">
+          <div class="gpay-logo">
+            <span class="g">G</span><span class="o1">o</span><span class="o2">o</span><span class="g2">g</span><span class="le">le</span>
+            <span class="pay"> Pay</span>
+          </div>
+          <span>— Подписаться</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="notice">Демо-версия. Реальные платежи не обрабатываются.</div>
+  </div>
+</div>
+
+<script>
+// ===== STARS =====
+const starsCanvas = document.getElementById('stars');
+const sc = starsCanvas.getContext('2d');
+starsCanvas.width = window.innerWidth;
+starsCanvas.height = window.innerHeight;
+const stars = Array.from({length:150}, () => ({
+  x: Math.random()*window.innerWidth,
+  y: Math.random()*window.innerHeight,
+  r: Math.random()*1.5,
+  speed: 0.2+Math.random()*0.5,
+  alpha: 0.3+Math.random()*0.7
+}));
+function drawStars() {
+  sc.clearRect(0,0,starsCanvas.width,starsCanvas.height);
+  stars.forEach(s => {
+    sc.beginPath();
+    sc.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    sc.fillStyle = `rgba(255,255,255,${s.alpha})`;
+    sc.fill();
+    s.y += s.speed;
+    if(s.y > starsCanvas.height) { s.y = 0; s.x = Math.random()*starsCanvas.width; }
+  });
+  requestAnimationFrame(drawStars);
+}
+drawStars();
+
+// ===== PAYMENT LOGIC =====
+// ===== STRIPE + GOOGLE PAY =====
+const STRIPE_KEY = 'pk_live_51T2BmvJc6iOtPYqhIZg1Tzm08n308tX82fsyZAypFBXMmtkwTm8EUf3lV4fk70P3fxGh4NpL4BsCQBKEE3xK6rlz00vnNE4NM9';
+const stripe = Stripe(STRIPE_KEY);
+
+let currentPlan = 'premium';
+let currentAmountCents = 149;
+let currentLabel = 'NEON BLASTER Premium';
+let playerLives = 3;
+let score = 0;
+let level = 1;
+let paymentRequest = null;
+let prButton = null;
+
+const plans = {
+  basic:        { title: 'БАЗОВЫЙ ДОСТУП',  price: '€0.49', amount: 49,  label: 'NEON BLASTER Basic',        desc: '10 уровней, базовое оружие, 1 жизнь',                   lives: 1  },
+  premium:      { title: 'ПРЕМИУМ ДОСТУП',  price: '€1.49', amount: 149, label: 'NEON BLASTER Premium',      desc: 'Все уровни, 3 вида оружия, 5 жизней',                   lives: 5  },
+  subscription: { title: 'NEON PASS',       price: '€0.79', amount: 79,  label: 'NEON PASS Подписка/мес',   desc: 'Всё включено, новый контент ежемесячно, без рекламы',   lives: 99 }
+};
+
+// Build a fresh PaymentRequest each time and mount the button
+async function mountGPayButton(amountCents, label) {
+  // Remove old button if any
+  const container = document.getElementById('gpay-container');
+  container.innerHTML = '';
+
+  paymentRequest = stripe.paymentRequest({
+    country: 'DE',
+    currency: 'eur',
+    total: { label, amount: amountCents },
+    requestPayerEmail: true,
+  });
+
+  const canMake = await paymentRequest.canMakePayment();
+
+  if (canMake && canMake.googlePay) {
+    // Real Google Pay available
+    prButton = stripe.elements().create('paymentRequestButton', {
+      paymentRequest,
+      style: { paymentRequestButton: { theme: 'dark', height: '48px' } }
+    });
+    prButton.mount('#gpay-container');
+
+    paymentRequest.on('paymentmethod', async (ev) => {
+      showSpinner();
+
+      // ✅ Укажите URL вашего сервера после деплоя на Railway/Render:
+      const SERVER_URL = 'https://neon-blaster-server1.onrender.com';
+
+      try {
+        const res = await fetch(SERVER_URL + '/create-payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: amountCents, currency: 'eur' })
+        });
+        const data = await res.json();
+        if (data.error) { ev.complete('fail'); showError(data.error); return; }
+
+        const { error } = await stripe.confirmCardPayment(
+          data.clientSecret,
+          { payment_method: ev.paymentMethod.id },
+          { handleActions: false }
+        );
+        if (error) { ev.complete('fail'); showError(error.message); return; }
+        ev.complete('success');
+        showSuccess();
+      } catch(err) {
+        ev.complete('fail');
+        showError('Ошибка соединения с сервером: ' + err.message);
+      }
+    });
+  } else {
+    // Google Pay not available — show fallback Stripe card form
+    container.innerHTML = `
+      <div id="card-element-wrapper">
+        <div id="stripe-card-element" style="background:#111;border:1px solid #333;border-radius:8px;padding:14px;margin-bottom:12px;"></div>
+        <div id="card-errors" style="color:#ff006e;font-family:'Share Tech Mono',monospace;font-size:0.7rem;min-height:18px;margin-bottom:8px;"></div>
+        <button class="btn-primary" style="width:100%;" onclick="payWithCard()">💳 Оплатить ${(amountCents/100).toFixed(2)}€</button>
+      </div>`;
+    const elements = stripe.elements();
+    window._cardElement = elements.create('card', {
+      style: { base: { color:'#fff', fontFamily:'Share Tech Mono,monospace', fontSize:'14px', '::placeholder': { color:'#555' } } }
+    });
+    window._cardElement.mount('#stripe-card-element');
+    window._cardElement.on('change', e => {
+      document.getElementById('card-errors').textContent = e.error ? e.error.message : '';
+    });
+  }
+}
+
+async function payWithCard() {
+  showSpinner();
+  const SERVER_URL = 'https://neon-blaster-server1.onrender.com';
+  try {
+    const res = await fetch(SERVER_URL + '/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: currentAmountCents, currency: 'eur' })
+    });
+    const data = await res.json();
+    if (data.error) { showError(data.error); return; }
+
+    const { error } = await stripe.confirmCardPayment(data.clientSecret, {
+      payment_method: { card: window._cardElement }
+    });
+    if (error) { showError(error.message); return; }
+    showSuccess();
+  } catch(err) {
+    showError('Ошибка соединения с сервером: ' + err.message);
+  }
+}
+
+function showSpinner() {
+  document.getElementById('payment-form').style.display = 'none';
+  document.getElementById('payment-spinner').style.display = 'flex';
+  document.getElementById('payment-success').style.display = 'none';
+}
+
+function showSuccess() {
+  document.getElementById('payment-spinner').style.display = 'none';
+  document.getElementById('success-msg').textContent = plans[currentPlan]
+    ? plans[currentPlan].title + ' активирован!'
+    : currentLabel + ' получено!';
+  document.getElementById('payment-success').style.display = 'flex';
+  playerLives = plans[currentPlan] ? plans[currentPlan].lives : playerLives + 3;
+}
+
+function showError(msg) {
+  document.getElementById('payment-spinner').style.display = 'none';
+  document.getElementById('payment-form').style.display = 'block';
+  alert('Ошибка оплаты: ' + msg);
+}
+
+function openPayment(plan) {
+  currentPlan = plan;
+  const p = plans[plan];
+  currentAmountCents = p.amount;
+  currentLabel = p.label;
+  document.getElementById('modal-title').textContent = p.title;
+  document.getElementById('modal-price').textContent = p.price;
+  document.getElementById('modal-desc').textContent = p.desc;
+  document.getElementById('payment-form').style.display = 'block';
+  document.getElementById('payment-spinner').style.display = 'none';
+  document.getElementById('payment-success').style.display = 'none';
+  document.getElementById('payment-modal').classList.add('active');
+  mountGPayButton(p.amount, p.label);
+}
+
+function closeModal() {
+  document.getElementById('payment-modal').classList.remove('active');
+}
+
+// Legacy shim — no longer used directly but kept for shop items
+function processPayment() { showSpinner(); setTimeout(showSuccess, 1500); }
+
+function afterPayment() {
+  closeModal();
+  startGame();
+}
+
+function startGameFree() { playerLives = 3; startGame(); }
+
+function showTitle() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('title-screen').classList.add('active');
+}
+
+function openShop() {
+  document.getElementById('shop-modal').classList.add('active');
+}
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+id).style.display = '';
+  btn.classList.add('active');
+}
+
+const shopItems = {
+  'Лазерная пушка': 89, 'Щит': 49, 'Бомба х5': 29, 'Ускорение': 39,
+  '1 жизнь': 19, '3 жизни': 49, '5 жизней': 79, 'Бесконечные жизни (1 ч)': 99,
+  'Подписка NEON PASS': 79
+};
+
+function buyItem(name, priceStr) {
+  currentPlan = null;
+  currentLabel = name;
+  const cents = shopItems[name] || parseInt(priceStr.replace(/[^\d]/g,'')) || 99;
+  currentAmountCents = cents;
+  document.getElementById('modal-title').textContent = name;
+  document.getElementById('modal-price').textContent = '€' + (cents/100).toFixed(2);
+  document.getElementById('modal-desc').textContent = 'Добавить в игру прямо сейчас';
+  document.getElementById('payment-form').style.display = 'block';
+  document.getElementById('payment-spinner').style.display = 'none';
+  document.getElementById('payment-success').style.display = 'none';
+  document.getElementById('shop-modal').classList.remove('active');
+  document.getElementById('payment-modal').classList.add('active');
+  mountGPayButton(cents, name);
+}
+
+// ===== GAME ENGINE =====
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+let gameRunning = false;
+let animId;
+
+let player, bullets, enemies, particles, enemyBullets;
+
+function startGame() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('game-screen').classList.add('active');
+
+  canvas.width = Math.min(window.innerWidth, 480);
+  canvas.height = Math.min(window.innerHeight - 60, 720);
+
+  score = 0; level = 1;
+  player = { x: canvas.width/2, y: canvas.height-60, w: 36, h: 36, lives: playerLives, speed: 4, shield: false };
+  bullets = []; enemies = []; particles = []; enemyBullets = [];
+
+  spawnEnemies();
+  updateHUD();
+  gameRunning = true;
+  if(animId) cancelAnimationFrame(animId);
+  gameLoop();
+}
+
+function restartGame() {
+  startGame();
+}
+
+function spawnEnemies() {
+  const rows = 2 + Math.floor(level/2);
+  const cols = 5 + Math.min(level, 3);
+  for(let r=0; r<rows; r++) {
+    for(let c=0; c<cols; c++) {
+      enemies.push({
+        x: 30 + c*(canvas.width-60)/cols,
+        y: 30 + r*40,
+        w:26, h:20,
+        alive: true,
+        color: r===0 ? '#ff006e' : r===1 ? '#ffbe0b' : '#00f5ff',
+        pts: (rows-r)*10,
+        shootTimer: Math.random()*200
+      });
+    }
+  }
+}
+
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key] = true);
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+// Touch / Mobile
+let touchX = null;
+canvas.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; });
+canvas.addEventListener('touchmove', e => {
+  const dx = e.touches[0].clientX - touchX;
+  player.x = Math.max(player.w/2, Math.min(canvas.width-player.w/2, player.x + dx));
+  touchX = e.touches[0].clientX;
+  e.preventDefault();
+}, {passive:false});
+canvas.addEventListener('touchend', () => {
+  bullets.push({x:player.x, y:player.y-20, speed:8, w:4, h:12});
+});
+
+let shootCooldown = 0;
+let enemyDir = 1;
+let enemyMoveTimer = 0;
+
+function gameLoop() {
+  if(!gameRunning) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // BG
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Player controls
+  if(keys['ArrowLeft'] || keys['a']) player.x = Math.max(player.w/2, player.x - player.speed);
+  if(keys['ArrowRight'] || keys['d']) player.x = Math.min(canvas.width-player.w/2, player.x + player.speed);
+  if((keys[' '] || keys['ArrowUp']) && shootCooldown <= 0) {
+    bullets.push({x:player.x, y:player.y-20, speed:8, w:4, h:12});
+    shootCooldown = 15;
+  }
+  if(shootCooldown > 0) shootCooldown--;
+
+  // Move enemies
+  enemyMoveTimer++;
+  const moveInterval = Math.max(20, 60 - level*5);
+  if(enemyMoveTimer >= moveInterval) {
+    enemyMoveTimer = 0;
+    const alive = enemies.filter(e=>e.alive);
+    const minX = Math.min(...alive.map(e=>e.x));
+    const maxX = Math.max(...alive.map(e=>e.x));
+    if((enemyDir===1 && maxX > canvas.width-40) || (enemyDir===-1 && minX < 40)) {
+      enemyDir *= -1;
+      alive.forEach(e => e.y += 15);
+    } else {
+      alive.forEach(e => e.x += enemyDir * 15);
+    }
+  }
+
+  // Enemy shoot
+  enemies.forEach(e => {
+    if(!e.alive) return;
+    e.shootTimer--;
+    if(e.shootTimer <= 0) {
+      enemyBullets.push({x:e.x, y:e.y+10, speed:3+level*0.3});
+      e.shootTimer = 100 + Math.random()*200;
+    }
+  });
+
+  // Draw & move bullets
+  ctx.fillStyle = '#00f5ff';
+  bullets.forEach(b => {
+    b.y -= b.speed;
+    ctx.shadowBlur = 8; ctx.shadowColor = '#00f5ff';
+    ctx.fillRect(b.x-b.w/2, b.y, b.w, b.h);
+  });
+  ctx.shadowBlur = 0;
+  bullets = bullets.filter(b => b.y > -20);
+
+  // Enemy bullets
+  enemyBullets.forEach(b => {
+    b.y += b.speed;
+    ctx.fillStyle = '#ff006e';
+    ctx.shadowBlur = 6; ctx.shadowColor = '#ff006e';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.shadowBlur = 0;
+  enemyBullets = enemyBullets.filter(b => b.y < canvas.height+20);
+
+  // Collision: player bullets vs enemies
+  bullets.forEach(b => {
+    enemies.forEach(e => {
+      if(!e.alive) return;
+      if(Math.abs(b.x-e.x)<e.w/2+2 && Math.abs(b.y-e.y)<e.h/2+6) {
+        e.alive = false;
+        b.y = -999;
+        score += e.pts;
+        for(let i=0;i<8;i++) particles.push({x:e.x,y:e.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:30,color:e.color});
+      }
+    });
+  });
+
+  // Collision: enemy bullets vs player
+  enemyBullets.forEach(b => {
+    if(Math.abs(b.x-player.x)<18 && Math.abs(b.y-player.y)<18) {
+      b.y = 9999;
+      player.lives--;
+      for(let i=0;i<12;i++) particles.push({x:player.x,y:player.y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,life:40,color:'#fff'});
+      updateHUD();
+      if(player.lives <= 0) { gameOver(); return; }
+    }
+  });
+
+  // Draw enemies
+  enemies.forEach(e => {
+    if(!e.alive) return;
+    ctx.fillStyle = e.color;
+    ctx.shadowBlur = 10; ctx.shadowColor = e.color;
+    // Ship shape
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y-10);
+    ctx.lineTo(e.x+12, e.y+8);
+    ctx.lineTo(e.x+5, e.y+4);
+    ctx.lineTo(e.x-5, e.y+4);
+    ctx.lineTo(e.x-12, e.y+8);
+    ctx.closePath();
+    ctx.fill();
+  });
+  ctx.shadowBlur = 0;
+
+  // Draw player
+  ctx.fillStyle = '#00f5ff';
+  ctx.shadowBlur = 15; ctx.shadowColor = '#00f5ff';
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y-18);
+  ctx.lineTo(player.x+15, player.y+14);
+  ctx.lineTo(player.x+6, player.y+8);
+  ctx.lineTo(player.x-6, player.y+8);
+  ctx.lineTo(player.x-15, player.y+14);
+  ctx.closePath();
+  ctx.fill();
+  // Thruster glow
+  ctx.fillStyle = `rgba(255,190,11,${0.4+Math.random()*0.4})`;
+  ctx.beginPath();
+  ctx.ellipse(player.x, player.y+14, 6, 8+Math.random()*4, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Particles
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy; p.life--;
+    const a = p.life/40;
+    ctx.fillStyle = p.color + Math.floor(a*255).toString(16).padStart(2,'0');
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+    ctx.fill();
+  });
+  particles = particles.filter(p => p.life>0);
+
+  // Score display
+  document.getElementById('score-display').textContent = score;
+
+  // Check next level
+  if(enemies.filter(e=>e.alive).length === 0) {
+    level++;
+    document.getElementById('level-display').textContent = level;
+    enemyBullets = [];
+    spawnEnemies();
+  }
+
+  // Check if enemies reached player
+  if(enemies.some(e => e.alive && e.y > canvas.height - 80)) {
+    gameOver(); return;
+  }
+
+  animId = requestAnimationFrame(gameLoop);
+}
+
+function updateHUD() {
+  document.getElementById('lives-display').textContent = '❤️'.repeat(Math.max(0,player.lives));
+  document.getElementById('level-display').textContent = level;
+}
+
+function gameOver() {
+  gameRunning = false;
+  document.getElementById('final-score').textContent = score;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('gameover-screen').classList.add('active');
+}
+
+// Mobile layout
+canvas.style.maxWidth = '100vw';
+canvas.style.maxHeight = 'calc(100vh - 60px)';
+</script>
+</body>
+</html>
